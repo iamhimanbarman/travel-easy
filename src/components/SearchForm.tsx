@@ -28,15 +28,29 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
   const parts = text.split(new RegExp(`(${query})`, 'gi'));
   return (
     <span className="truncate">
-      {parts.map((part, i) =>
-        part.toLowerCase() === query.toLowerCase() ? (
-          <span key={i} className="text-blue-600 dark:text-blue-400 font-semibold">
-            {part}
-          </span>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
+      {parts.map((part, i) => {
+        if (part.toLowerCase() === query.toLowerCase()) {
+          const beforePart = parts.slice(0, i).join('');
+          const afterPart = parts.slice(i + 1).join('');
+          
+          const isStartWord = beforePart.length === 0 || /[^a-zA-Z0-9]$/.test(beforePart);
+          const isEndWord = afterPart.length === 0 || /^[^a-zA-Z0-9]/.test(afterPart);
+          const isFullWordMatch = isStartWord && isEndWord;
+
+          return (
+            <span 
+              key={i} 
+              className={cn(
+                "font-semibold",
+                isFullWordMatch ? "text-green-600 dark:text-green-400" : "text-blue-600 dark:text-blue-400"
+              )}
+            >
+              {part}
+            </span>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
     </span>
   );
 }
