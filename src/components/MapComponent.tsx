@@ -36,7 +36,7 @@ async function fetchRoadRoute(coords: [number, number][]): Promise<any> {
   return null;
 }
 
-// Geocode a stop name via Nominatim for pinpoint accuracy (Kolkata-specific)
+// Geocode a stop name via Geoapify for pinpoint accuracy (Kolkata-specific)
 const geocodeCache: Record<string, [number, number] | null> = {};
 
 async function geocodeStop(name: string): Promise<[number, number] | null> {
@@ -44,10 +44,21 @@ async function geocodeStop(name: string): Promise<[number, number] | null> {
 
   try {
     const query = encodeURIComponent(`${name}, Kolkata, West Bengal, India`);
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&addressdetails=0`);
+    const key = process.env.NEXT_PUBLIC_GEOAPIFY_KEY;
+    
+    if (!key) {
+      console.warn('Missing Geoapify API key for geocoding.');
+      return null;
+    }
+
+    const res = await fetch(`https://api.geoapify.com/v1/geocode/search?text=${query}&apiKey=${key}`);
     const data = await res.json();
-    if (data && data.length > 0) {
-      const coord: [number, number] = [parseFloat(data[0].lon), parseFloat(data[0].lat)];
+    if (data && data.features && data.features.length > 0) {
+      // Geoapify returns GeoJSON coordinates in [lon, lat] format
+      const coord: [number, number] = [
+        data.features[0].geometry.coordinates[0], 
+        data.features[0].geometry.coordinates[1]
+      ];
       geocodeCache[name] = coord;
       return coord;
     }
@@ -202,13 +213,15 @@ export default function MapComponent({ result }: { result: FindResult }) {
 
   if (!bounds || resolvedLegCoords.length === 0) return null;
 
-  const mapStyle = {
-    version: 8,
-    sources: {
-      'carto': { type: 'raster', tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'], tileSize: 256, attribution: '&copy; CartoDB' }
-    },
-    layers: [{ id: 'carto-layer', type: 'raster', source: 'carto', minzoom: 0, maxzoom: 22 }]
-  };
+  const mapStyle = process.env.NEXT_PUBLIC_GEOAPIFY_KEY 
+    ? `https://maps.geoapify.com/v1/styles/osm-bright-smooth/style.json?apiKey=${process.env.NEXT_PUBLIC_GEOAPIFY_KEY}`
+    : {
+        version: 8,
+        sources: {
+          'carto': { type: 'raster', tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'], tileSize: 256, attribution: '&copy; CartoDB' }
+        },
+        layers: [{ id: 'carto-layer', type: 'raster', source: 'carto', minzoom: 0, maxzoom: 22 }]
+      };
 
   const markerColors = { origin: '#16a34a', dest: '#ea580c', transfer: '#f59e0b' };
   const markerLabels = { origin: 'Start', dest: 'End', transfer: 'Transfer' };
