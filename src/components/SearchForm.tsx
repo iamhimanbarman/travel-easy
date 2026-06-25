@@ -375,7 +375,7 @@ function RouteDetailPage({ journey, result, onBack }: { journey: Journey; result
 
 // ─── Main SearchForm ────────────────────────────────────────────
 
-export default function SearchForm() {
+export default function SearchForm({ onDetailChange }: { onDetailChange?: (open: boolean) => void }) {
   const [from, setFrom] = React.useState('');
   const [to, setTo] = React.useState('');
   const [result, setResult] = React.useState<FindResult | null>(null);
@@ -393,6 +393,32 @@ export default function SearchForm() {
     }
   }, [from, to]);
 
+  // Open detail page — push history state so mobile back button works
+  const openDetail = React.useCallback((journey: Journey) => {
+    setSelectedJourney(journey);
+    onDetailChange?.(true);
+    window.history.pushState({ detail: true }, '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [onDetailChange]);
+
+  // Close detail page
+  const closeDetail = React.useCallback(() => {
+    setSelectedJourney(null);
+    onDetailChange?.(false);
+  }, [onDetailChange]);
+
+  // Listen for browser back button (popstate) — return to search instead of closing
+  React.useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      if (selectedJourney) {
+        e.preventDefault();
+        closeDetail();
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [selectedJourney, closeDetail]);
+
   // ── Detail page ──
   if (selectedJourney && result) {
     return (
@@ -401,7 +427,10 @@ export default function SearchForm() {
           key="detail"
           journey={selectedJourney}
           result={result}
-          onBack={() => setSelectedJourney(null)}
+          onBack={() => {
+            // Go back in history so the state stays consistent
+            window.history.back();
+          }}
         />
       </AnimatePresence>
     );
@@ -452,9 +481,9 @@ export default function SearchForm() {
               </div>
             ) : (
               <div className="flex flex-col gap-8">
-                <RouteGroup title="Direct" subtitle="one bus ride" routes={result.direct} onSelect={setSelectedJourney} />
-                <RouteGroup title="One change" subtitle="two rides" routes={result.one} onSelect={setSelectedJourney} />
-                <RouteGroup title="Two changes" subtitle="three rides" routes={result.two} onSelect={setSelectedJourney} />
+                <RouteGroup title="Direct" subtitle="one bus ride" routes={result.direct} onSelect={openDetail} />
+                <RouteGroup title="One change" subtitle="two rides" routes={result.one} onSelect={openDetail} />
+                <RouteGroup title="Two changes" subtitle="three rides" routes={result.two} onSelect={openDetail} />
               </div>
             )}
           </motion.div>

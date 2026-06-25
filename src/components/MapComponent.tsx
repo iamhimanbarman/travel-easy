@@ -36,6 +36,39 @@ async function fetchRoadRoute(coords: [number, number][]): Promise<any> {
   return null;
 }
 
+// Geocode a stop name via Nominatim for pinpoint accuracy (Kolkata-specific)
+const geocodeCache: Record<string, [number, number] | null> = {};
+
+async function geocodeStop(name: string): Promise<[number, number] | null> {
+  if (name in geocodeCache) return geocodeCache[name];
+
+  try {
+    const query = encodeURIComponent(`${name}, Kolkata, West Bengal, India`);
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&addressdetails=0`);
+    const data = await res.json();
+    if (data && data.length > 0) {
+      const coord: [number, number] = [parseFloat(data[0].lon), parseFloat(data[0].lat)];
+      geocodeCache[name] = coord;
+      return coord;
+    }
+  } catch (e) { console.error('Geocode failed for', name, e); }
+  
+  geocodeCache[name] = null;
+  return null;
+}
+
+// Get best coordinate for a stop: try dataset first, fallback to geocoding
+async function getBestCoord(name: string): Promise<[number, number] | null> {
+  // First check the dataset
+  const dataCoord = getStopCoord(name);
+  if (dataCoord) {
+    // Dataset stores [lat, lng] — convert to [lng, lat] for map
+    return [dataCoord[1], dataCoord[0]];
+  }
+  // Fallback to geocoding
+  return geocodeStop(name);
+}
+
 
 // ─── User Location Dot ─────────────────────────────────────────
 
@@ -58,7 +91,15 @@ export default function MapComponent({ result }: { result: FindResult }) {
   const [routeSegments, setRouteSegments] = useState<any[]>([]);
   const [walkGeoJson, setWalkGeoJson] = useState<any>(null);
   const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(null);
+  const [resolvedMarkers, setResolvedMarkers] = useState<{ name: string; coord: [number, number]; type: 'origin' | 'dest' | 'transfer' }[]>([]);
+  const [resolvedLegCoords, setResolvedLegCoords] = useState<{ coords: [number, number][]; leg: Leg }[]>([]);
   const watchRef = useRef<number | null>(null);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
 
   // Live GPS
   useEffect(() => {
@@ -71,75 +112,84 @@ export default function MapComponent({ result }: { result: FindResult }) {
     return () => { if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current); };
   }, []);
 
-  // Extract per-leg coordinates
-  const { legCoords, markers } = useMemo(() => {
-    const legsC: { coords: [number, number][]; leg: Leg }[] = [];
-    const mkrs: { name: string; coord: [number, number]; type: 'origin' | 'dest' | 'transfer' }[] = [];
-
-    if (!result || result.error || (result.direct.length === 0 && result.one.length === 0 && result.two.length === 0))
-      return { legCoords: legsC, markers: mkrs };
+  // Resolve all stop coordinates with geocoding for accuracy
+  useEffect(() => {
+    if (!result || result.error || (result.direct.length === 0 && result.one.length === 0 && result.two.length === 0)) {
+      setResolvedMarkers([]);
+      setResolvedLegCoords([]);
+      return;
+    }
 
     const journey = result.direct[0] || result.one[0] || result.two[0];
-    if (!journey) return { legCoords: legsC, markers: mkrs };
+    if (!journey) return;
 
-    const originCoord = getStopCoord(result.origin);
-    const destCoord = getStopCoord(result.dest);
-    if (originCoord) mkrs.push({ name: result.origin, coord: originCoord, type: 'origin' });
+    const resolveAll = async () => {
+      const mkrs: { name: string; coord: [number, number]; type: 'origin' | 'dest' | 'transfer' }[] = [];
+      const legsC: { coords: [number, number][]; leg: Leg }[] = [];
 
-    journey.legs.forEach((leg, i) => {
-      const coords: [number, number][] = [];
-      leg.stops.forEach(stop => {
-        const c = getStopCoord(stop);
-        if (c) coords.push([c[1], c[0]]); // [lng, lat]
-      });
-      legsC.push({ coords, leg });
+      // Resolve origin
+      const originCoord = await getBestCoord(result.origin);
+      if (originCoord) mkrs.push({ name: result.origin, coord: originCoord, type: 'origin' });
 
-      if (i < journey.legs.length - 1) {
-        const tc = getStopCoord(leg.to);
-        if (tc) mkrs.push({ name: leg.to, coord: tc, type: 'transfer' });
+      // Resolve each leg's stops
+      for (let i = 0; i < journey.legs.length; i++) {
+        const leg = journey.legs[i];
+        const coords: [number, number][] = [];
+
+        for (const stop of leg.stops) {
+          const c = await getBestCoord(stop);
+          if (c) coords.push(c);
+        }
+
+        legsC.push({ coords, leg });
+
+        // Transfer markers
+        if (i < journey.legs.length - 1) {
+          const tc = await getBestCoord(leg.to);
+          if (tc) mkrs.push({ name: leg.to, coord: tc, type: 'transfer' });
+        }
       }
-    });
 
-    if (destCoord) mkrs.push({ name: result.dest, coord: destCoord, type: 'dest' });
-    return { legCoords: legsC, markers: mkrs };
+      // Resolve destination
+      const destCoord = await getBestCoord(result.dest);
+      if (destCoord) mkrs.push({ name: result.dest, coord: destCoord, type: 'dest' });
+
+      if (isMounted.current) {
+        setResolvedMarkers(mkrs);
+        setResolvedLegCoords(legsC);
+      }
+    };
+
+    resolveAll();
   }, [result]);
 
-  // Fetch OSRM route for each leg separately (so colors are separate)
+  // Fetch OSRM route for each leg
   useEffect(() => {
-    if (legCoords.length === 0) { setRouteSegments([]); return; }
+    if (resolvedLegCoords.length === 0) { setRouteSegments([]); return; }
 
-    Promise.all(legCoords.map(async (lc) => {
+    Promise.all(resolvedLegCoords.map(async (lc) => {
       if (lc.coords.length < 2) return { geojson: null, leg: lc.leg, coords: lc.coords };
       const route = await fetchRoadRoute(lc.coords);
       if (route) {
-        return {
-          geojson: { type: 'Feature', properties: {}, geometry: route.geometry },
-          leg: lc.leg,
-          coords: lc.coords
-        };
+        return { geojson: { type: 'Feature', properties: {}, geometry: route.geometry }, leg: lc.leg, coords: lc.coords };
       }
-      // Fallback straight line
-      return {
-        geojson: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: lc.coords } },
-        leg: lc.leg,
-        coords: lc.coords
-      };
-    })).then(setRouteSegments);
-  }, [legCoords]);
+      return { geojson: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: lc.coords } }, leg: lc.leg, coords: lc.coords };
+    })).then(segs => { if (isMounted.current) setRouteSegments(segs); });
+  }, [resolvedLegCoords]);
 
   // Walk route (user → origin)
   useEffect(() => {
-    if (!userLoc || markers.length === 0) { setWalkGeoJson(null); return; }
-    const origin = markers.find(m => m.type === 'origin');
+    if (!userLoc || resolvedMarkers.length === 0) { setWalkGeoJson(null); return; }
+    const origin = resolvedMarkers.find(m => m.type === 'origin');
     if (!origin) return;
-    fetchRoadRoute([[userLoc.lng, userLoc.lat], [origin.coord[1], origin.coord[0]]]).then(route => {
-      if (route) setWalkGeoJson({ type: 'Feature', properties: {}, geometry: route.geometry });
+    fetchRoadRoute([[userLoc.lng, userLoc.lat], origin.coord]).then(route => {
+      if (route && isMounted.current) setWalkGeoJson({ type: 'Feature', properties: {}, geometry: route.geometry });
     });
-  }, [userLoc, markers]);
+  }, [userLoc, resolvedMarkers]);
 
   // Bounds
   const bounds = useMemo(() => {
-    const all: [number, number][] = legCoords.flatMap(lc => lc.coords);
+    const all: [number, number][] = resolvedLegCoords.flatMap(lc => lc.coords);
     if (userLoc) all.push([userLoc.lng, userLoc.lat]);
     if (all.length === 0) return null;
     const lats = all.map(c => c[1]);
@@ -148,9 +198,9 @@ export default function MapComponent({ result }: { result: FindResult }) {
       [Math.min(...lngs) - 0.005, Math.min(...lats) - 0.005],
       [Math.max(...lngs) + 0.005, Math.max(...lats) + 0.005]
     ] as [[number, number], [number, number]];
-  }, [legCoords, userLoc]);
+  }, [resolvedLegCoords, userLoc]);
 
-  if (!bounds || legCoords.length === 0) return null;
+  if (!bounds || resolvedLegCoords.length === 0) return null;
 
   const mapStyle = {
     version: 8,
@@ -202,8 +252,8 @@ export default function MapComponent({ result }: { result: FindResult }) {
         })}
 
         {/* Stop markers */}
-        {markers.map((m, i) => (
-          <Marker key={`${m.name}-${i}`} longitude={m.coord[1]} latitude={m.coord[0]} anchor="bottom">
+        {resolvedMarkers.map((m, i) => (
+          <Marker key={`${m.name}-${i}`} longitude={m.coord[0]} latitude={m.coord[1]} anchor="bottom">
             <div className="flex flex-col items-center">
               <div className="bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md px-3 py-1.5 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700 text-xs whitespace-nowrap mb-1">
                 <span className="font-bold">{m.name}</span>
