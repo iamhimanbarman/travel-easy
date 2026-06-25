@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Check, ArrowDownUp, MapPin, X } from 'lucide-react';
+import { Check, ArrowDownUp, MapPin, X, BusFront, TrainFront } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -288,8 +288,9 @@ function JourneyCard({ journey }: { journey: any }) {
           {legs.map((l: any, i: number) => (
             <React.Fragment key={i}>
               {i > 0 && <span className="text-zinc-400">›</span>}
-              <Badge variant={isMetro(l) ? "default" : "secondary"} className={cn(isMetro(l) ? "bg-purple-600 hover:bg-purple-700" : "")}>
-                {l.route} {isMetro(l) ? '(Metro)' : ''}
+              <Badge variant={isMetro(l) ? "default" : "secondary"} className={cn("flex items-center gap-1.5 shadow-sm", isMetro(l) ? "bg-purple-600 hover:bg-purple-700" : "")}>
+                {isMetro(l) ? <TrainFront className="w-3.5 h-3.5" /> : <BusFront className="w-3.5 h-3.5" />}
+                <span className="font-semibold">{l.route}</span>
               </Badge>
             </React.Fragment>
           ))}
