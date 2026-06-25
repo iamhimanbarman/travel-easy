@@ -23,6 +23,24 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
+function HighlightMatch({ text, query }: { text: string; query: string }) {
+  if (!query) return <span className="truncate">{text}</span>;
+  const parts = text.split(new RegExp(`(${query})`, 'gi'));
+  return (
+    <span className="truncate">
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase() ? (
+          <span key={i} className="text-blue-600 dark:text-blue-400 font-semibold">
+            {part}
+          </span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </span>
+  );
+}
+
 function StopCombobox({ value, setValue, placeholder }: { value: string, setValue: (v: string) => void, placeholder: string }) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState(value);
@@ -100,7 +118,7 @@ function StopCombobox({ value, setValue, placeholder }: { value: string, setValu
                           value === stop ? "opacity-100" : "opacity-0"
                         )}
                       />
-                      <span className="truncate">{stop}</span>
+                      <HighlightMatch text={stop} query={search} />
                     </div>
                     <span className="text-xs text-muted-foreground bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-full shrink-0 ml-2">
                       {stopHint(stop)}
