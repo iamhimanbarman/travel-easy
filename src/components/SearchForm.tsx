@@ -53,7 +53,19 @@ function StopCombobox({ value, setValue, placeholder }: { value: string, setValu
   const filtered = React.useMemo(() => {
     if (!search || search.trim() === '') return [];
     const lower = search.toLowerCase();
-    return sortedSearchNames.filter(s => s.toLowerCase().includes(lower)).slice(0, 50);
+    
+    const matches = sortedSearchNames.filter(s => s.toLowerCase().includes(lower));
+    
+    matches.sort((a, b) => {
+      const idxA = a.toLowerCase().indexOf(lower);
+      const idxB = b.toLowerCase().indexOf(lower);
+      if (idxA !== idxB) {
+        return idxA - idxB;
+      }
+      return a.localeCompare(b);
+    });
+    
+    return matches.slice(0, 50);
   }, [search]);
 
   return (
