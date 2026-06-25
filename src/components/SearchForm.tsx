@@ -17,7 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { sortedSearchNames, stopHint, findRoute, FindResult } from '@/lib/routing';
+import { sortedSearchNames, stopHint, stopTypes, findRoute, FindResult } from '@/lib/routing';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -55,6 +55,18 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
     </span>
   );
 }
+
+const typeStyles = {
+  bus: "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-transparent",
+  metro: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800",
+  combined: "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+};
+
+const itemHoverStyles = {
+  bus: "hover:bg-zinc-100 dark:hover:bg-zinc-800",
+  metro: "hover:bg-purple-50 dark:hover:bg-purple-900/20",
+  combined: "hover:bg-blue-50 dark:hover:bg-blue-900/20"
+};
 
 function StopCombobox({ value, setValue, placeholder }: { value: string, setValue: (v: string) => void, placeholder: string }) {
   const [open, setOpen] = React.useState(false);
@@ -128,15 +140,18 @@ function StopCombobox({ value, setValue, placeholder }: { value: string, setValu
           >
             <ScrollArea className="h-[50vh] max-h-[300px]">
               <div className="p-1">
-                {filtered.map((stop) => (
+                {filtered.map((stop) => {
+                  const sType = stopTypes(stop);
+                  return (
                   <div
                     key={stop}
-                    onClick={() => {
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // Prevents input blur before click registers
                       setValue(stop);
                       setSearch(stop);
                       setOpen(false);
                     }}
-                    className="relative flex w-full select-none items-center justify-between rounded-sm px-2 py-3 text-sm outline-none hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors"
+                    className={cn("relative flex w-full select-none items-center justify-between rounded-sm px-2 py-3 text-sm outline-none cursor-pointer transition-colors", itemHoverStyles[sType])}
                   >
                     <div className="flex items-center gap-2">
                       <Check
@@ -147,11 +162,11 @@ function StopCombobox({ value, setValue, placeholder }: { value: string, setValu
                       />
                       <HighlightMatch text={stop} query={search} />
                     </div>
-                    <span className="text-xs text-muted-foreground bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-full shrink-0 ml-2">
+                    <span className={cn("text-xs px-2 py-1 rounded-full shrink-0 ml-2 font-medium", typeStyles[sType])}>
                       {stopHint(stop)}
                     </span>
                   </div>
-                ))}
+                )})}
               </div>
             </ScrollArea>
           </motion.div>

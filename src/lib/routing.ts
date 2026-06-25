@@ -86,6 +86,24 @@ export function stopHint(name: string) {
   return `${n} route${n !== 1 ? 's' : ''}`;
 }
 
+export function stopTypes(name: string): 'metro' | 'bus' | 'combined' {
+  const target = resolveStopName(name);
+  const rs = stopRoutes[target];
+  if (!rs || rs.length === 0) return 'bus';
+  
+  let hasMetro = false;
+  let hasBus = false;
+  
+  for (const rIdx of rs) {
+    if (routes[rIdx].kind === 'metro') hasMetro = true;
+    else hasBus = true;
+    
+    if (hasMetro && hasBus) return 'combined';
+  }
+  
+  return hasMetro ? 'metro' : 'bus';
+}
+
 export interface Leg {
   route: string;
   kind: string;
