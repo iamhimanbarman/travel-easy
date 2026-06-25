@@ -33,7 +33,7 @@ function StopCombobox({ value, setValue, placeholder }: { value: string, setValu
   }, [value]);
 
   const filtered = React.useMemo(() => {
-    if (!search) return sortedSearchNames.slice(0, 50);
+    if (!search || search.trim() === '') return [];
     const lower = search.toLowerCase();
     return sortedSearchNames.filter(s => s.toLowerCase().includes(lower)).slice(0, 50);
   }, [search]);
