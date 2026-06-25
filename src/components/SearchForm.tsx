@@ -81,7 +81,7 @@ function StopCombobox({ value, setValue, placeholder }: { value: string, setValu
             transition={{ duration: 0.15 }}
             className="absolute top-[calc(100%+8px)] left-0 right-0 z-50 rounded-md border border-zinc-200 dark:border-zinc-800 bg-popover text-popover-foreground shadow-md outline-none overflow-hidden"
           >
-            <ScrollArea className="h-[300px]">
+            <ScrollArea className="h-[50vh] max-h-[300px]">
               <div className="p-1">
                 {filtered.map((stop) => (
                   <div
@@ -140,7 +140,7 @@ export default function SearchForm() {
 
   return (
     <div className="w-full max-w-xl mx-auto flex flex-col gap-6">
-      <Card className="p-4 bg-white/60 dark:bg-zinc-950/60 backdrop-blur-xl border-zinc-200/50 dark:border-zinc-800/50 shadow-xl shadow-zinc-200/20 dark:shadow-none">
+      <Card className="p-4 bg-white/60 dark:bg-zinc-950/60 backdrop-blur-xl border-zinc-200/50 dark:border-zinc-800/50 shadow-xl shadow-zinc-200/20 dark:shadow-none overflow-visible">
         <div className="relative flex flex-col gap-3">
           <StopCombobox value={from} setValue={setFrom} placeholder="Where from?" />
           
