@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Check, ChevronsUpDown, ArrowDownUp, MapPin, Search } from 'lucide-react';
+import { Check, ArrowDownUp, MapPin, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,9 +25,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 function StopCombobox({ value, setValue, placeholder }: { value: string, setValue: (v: string) => void, placeholder: string }) {
   const [open, setOpen] = React.useState(false);
-  // limit rendering to avoid lag with 2000+ items, standard technique for combobox with many items
-  const [search, setSearch] = React.useState('');
+  const [search, setSearch] = React.useState(value);
+  const inputRef = React.useRef<HTMLInputElement>(null);
   
+  React.useEffect(() => {
+    setSearch(value);
+  }, [value]);
+
   const filtered = React.useMemo(() => {
     if (!search) return sortedSearchNames.slice(0, 50);
     const lower = search.toLowerCase();
@@ -35,60 +39,80 @@ function StopCombobox({ value, setValue, placeholder }: { value: string, setValu
   }, [search]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
+    <div className="relative w-full">
+      <div 
         className={cn(
-          "flex w-full items-center justify-between rounded-md h-14 px-4 text-base font-normal bg-background/50 backdrop-blur-sm border border-zinc-200 dark:border-zinc-800 shadow-sm",
-          "hover:bg-accent hover:text-accent-foreground focus:outline-hidden focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          "flex w-full items-center rounded-md h-14 px-4 text-base font-normal bg-background/50 backdrop-blur-sm border border-zinc-200 dark:border-zinc-800 shadow-sm transition-all focus-within:ring-1 focus-within:ring-ring",
+          open ? "ring-1 ring-ring" : ""
         )}
       >
-          <div className="flex items-center gap-2 overflow-hidden">
-            <MapPin className="h-4 w-4 text-zinc-500 shrink-0" />
-            <span className="truncate">{value || placeholder}</span>
-          </div>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-      </PopoverTrigger>
-      <PopoverContent className="w-[90vw] sm:w-[400px] p-0" align="start" sideOffset={8}>
-        <Command shouldFilter={false}>
-          <CommandInput 
-            placeholder="Search stops..." 
-            value={search}
-            onValueChange={setSearch}
-          />
-          <CommandEmpty>No stops found.</CommandEmpty>
-          <CommandGroup>
+        <MapPin className="h-4 w-4 text-zinc-500 shrink-0 mr-2" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setOpen(true);
+            if (e.target.value === '') setValue('');
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 200)}
+          placeholder={placeholder}
+          className="flex-1 bg-transparent border-none outline-none text-base placeholder:text-muted-foreground w-full h-full"
+        />
+        {search && (
+          <button 
+            type="button"
+            onClick={() => { setSearch(''); setValue(''); inputRef.current?.focus(); }}
+            className="p-1 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-500 transition-colors"
+          >
+            <X className="h-4 w-4 shrink-0 opacity-70" />
+          </button>
+        )}
+      </div>
+      
+      <AnimatePresence>
+        {open && filtered.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            transition={{ duration: 0.15 }}
+            className="absolute top-[calc(100%+8px)] left-0 right-0 z-50 rounded-md border border-zinc-200 dark:border-zinc-800 bg-popover text-popover-foreground shadow-md outline-none overflow-hidden"
+          >
             <ScrollArea className="h-[300px]">
-              <CommandList>
+              <div className="p-1">
                 {filtered.map((stop) => (
-                  <CommandItem
+                  <div
                     key={stop}
-                    value={stop}
-                    onSelect={(currentValue) => {
+                    onClick={() => {
                       setValue(stop);
+                      setSearch(stop);
                       setOpen(false);
                     }}
-                    className="flex justify-between items-center py-3"
+                    className="relative flex w-full select-none items-center justify-between rounded-sm px-2 py-3 text-sm outline-none hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors"
                   >
                     <div className="flex items-center gap-2">
                       <Check
                         className={cn(
-                          "h-4 w-4",
+                          "h-4 w-4 shrink-0 text-primary",
                           value === stop ? "opacity-100" : "opacity-0"
                         )}
                       />
-                      <span>{stop}</span>
+                      <span className="truncate">{stop}</span>
                     </div>
-                    <span className="text-xs text-muted-foreground bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-full">
+                    <span className="text-xs text-muted-foreground bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-full shrink-0 ml-2">
                       {stopHint(stop)}
                     </span>
-                  </CommandItem>
+                  </div>
                 ))}
-              </CommandList>
+              </div>
             </ScrollArea>
-          </CommandGroup>
-        </Command>
-      </PopoverContent>
-    </Popover>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
