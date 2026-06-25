@@ -71,6 +71,11 @@ export function resolveStopName(value: string) {
   return stopLookup[cleanStopKey(raw)] || raw;
 }
 
+export function getStopCoord(name: string): [number, number] | null {
+  const resolved = resolveStopName(name);
+  return coord[resolved] || null;
+}
+
 export const sortedSearchNames = Array.from(
   new Set([...stopNames, ...Object.keys(stopAliases).filter((alias) => stopRoutes[stopAliases[alias]])])
 ).sort((a, b) => a.localeCompare(b));

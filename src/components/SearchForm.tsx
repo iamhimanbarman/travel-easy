@@ -22,6 +22,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import RouteMap from './RouteMap';
 
 function HighlightMatch({ text, query }: { text: string; query: string }) {
   if (!query) return <span className="truncate">{text}</span>;
@@ -160,6 +161,7 @@ function StopCombobox({ value, setValue, placeholder }: { value: string, setValu
   );
 }
 
+
 export default function SearchForm() {
   const [from, setFrom] = React.useState('');
   const [to, setTo] = React.useState('');
@@ -225,11 +227,14 @@ export default function SearchForm() {
                 <p className="text-sm">These two stands aren't connected within two changes in the loaded routes.</p>
               </div>
             ) : (
-              <div className="flex flex-col gap-8">
-                <RouteGroup title="Direct" subtitle="one bus ride" routes={result.direct} />
-                <RouteGroup title="One change" subtitle="two rides" routes={result.one} />
-                <RouteGroup title="Two changes" subtitle="three rides" routes={result.two} />
-              </div>
+              <>
+                <RouteMap result={result} />
+                <div className="flex flex-col gap-8">
+                  <RouteGroup title="Direct" subtitle="one bus ride" routes={result.direct} />
+                  <RouteGroup title="One change" subtitle="two rides" routes={result.one} />
+                  <RouteGroup title="Two changes" subtitle="three rides" routes={result.two} />
+                </div>
+              </>
             )}
           </motion.div>
         )}
