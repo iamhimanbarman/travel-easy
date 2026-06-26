@@ -17,9 +17,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const text = encodeURIComponent(`${q}, Kolkata, West Bengal, India`);
+    const text = encodeURIComponent(`${q}, West Bengal, India`);
+    
+    // Bias results to the greater Kolkata metropolitan region bounding box
+    // Covers: Kalyani (north) to Diamond Harbour (south), Howrah (west) to Barasat/Salt Lake (east)
+    const bias = 'rect:88.15,22.20,88.65,22.90';
+    
     const res = await fetch(
-      `https://api.geoapify.com/v1/geocode/search?text=${text}&limit=1&apiKey=${key}`
+      `https://api.geoapify.com/v1/geocode/search?text=${text}&bias=${bias}&limit=1&apiKey=${key}`
     );
 
     if (!res.ok) {
