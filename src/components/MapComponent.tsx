@@ -64,19 +64,33 @@ async function fetchRoute(coords: [number, number][]): Promise<any> {
     c = c.filter((_, i) => i % step === 0 || i === c.length - 1);
   }
 
-  // Geoapify expects waypoints as lat,lon|lat,lon
-  const waypoints = c.map(p => `${p[1]},${p[0]}`).join('|');
-
+  // Try Geoapify proxy first (key hidden on server)
   try {
+    const waypoints = c.map(p => `${p[1]},${p[0]}`).join('|');
     const res = await fetch(`/api/route?waypoints=${encodeURIComponent(waypoints)}`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data.geometry) {
-      return { geometry: data.geometry, distance: data.distance, time: data.time };
+    if (res.ok) {
+      const data = await res.json();
+      if (data.geometry) {
+        return { geometry: data.geometry, distance: data.distance, time: data.time };
+      }
     }
-  } catch (e) {
-    console.error('Routing failed:', e);
-  }
+  } catch { /* fall through to OSRM */ }
+
+  // Fallback: OSRM (no API key needed)
+  try {
+    let osrmCoords = c;
+    if (osrmCoords.length > 80) {
+      const step = Math.ceil(osrmCoords.length / 80);
+      osrmCoords = osrmCoords.filter((_, i) => i % step === 0 || i === osrmCoords.length - 1);
+    }
+    const str = osrmCoords.map(p => `${p[0]},${p[1]}`).join(';');
+    const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${str}?overview=full&geometries=geojson`);
+    const data = await res.json();
+    if (data.code === 'Ok' && data.routes?.[0]) {
+      return { geometry: data.routes[0].geometry, distance: data.routes[0].distance, time: data.routes[0].duration };
+    }
+  } catch (e) { console.error('OSRM fallback failed:', e); }
+
   return null;
 }
 
@@ -143,10 +157,22 @@ export default function MapComponent({ result }: { result: FindResult }) {
 
   // ── Load map style from server proxy (key stays hidden) ──
   useEffect(() => {
+    // Fallback raster style if Geoapify proxy is unavailable
+    const fallbackStyle = {
+      version: 8 as const,
+      sources: {
+        'carto': { type: 'raster' as const, tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'], tileSize: 256, attribution: '&copy; CartoDB &copy; OSM' }
+      },
+      layers: [{ id: 'carto-layer', type: 'raster' as const, source: 'carto', minzoom: 0, maxzoom: 22 }]
+    };
+
     fetch('/api/map-style')
-      .then(r => r.ok ? r.json() : null)
-      .then(style => { if (mountedRef.current && style) setMapStyle(style); })
-      .catch(() => {});
+      .then(r => {
+        if (!r.ok) throw new Error('Style proxy unavailable');
+        return r.json();
+      })
+      .then(style => { if (mountedRef.current) setMapStyle(style); })
+      .catch(() => { if (mountedRef.current) setMapStyle(fallbackStyle); });
   }, []);
 
   // ── Live GPS tracking ──
