@@ -46,9 +46,15 @@ async function geocodeStop(name: string): Promise<[number, number] | null> {
 }
 
 async function getBestCoord(name: string): Promise<[number, number] | null> {
+  // Always try geocoding first — dataset coordinates are often inaccurate
+  const geocoded = await geocodeStop(name);
+  if (geocoded) return geocoded;
+  
+  // Fallback to dataset if geocoding fails
   const dataCoord = getStopCoord(name);
   if (dataCoord) return [dataCoord[1], dataCoord[0]]; // [lng, lat]
-  return geocodeStop(name);
+  
+  return null;
 }
 
 
@@ -186,7 +192,7 @@ export default function MapComponent({ result }: { result: FindResult }) {
     return () => { if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current); };
   }, []);
 
-  // ── Resolve all stop coordinates ──
+  // ── Resolve key waypoint coordinates (leg start/end only) ──
   useEffect(() => {
     if (!result || result.error || (result.direct.length === 0 && result.one.length === 0 && result.two.length === 0)) {
       setResolvedMarkers([]); setResolvedLegCoords([]); setIsLoading(false);
@@ -202,24 +208,30 @@ export default function MapComponent({ result }: { result: FindResult }) {
       const mkrs: MarkerData[] = [];
       const legsC: LegCoordData[] = [];
 
+      // Geocode the origin
       const originCoord = await getBestCoord(result.origin);
       if (originCoord) mkrs.push({ name: result.origin, coord: originCoord, type: 'origin' });
 
       for (let i = 0; i < journey.legs.length; i++) {
         const leg = journey.legs[i];
+
+        // Only geocode the START and END of each leg (accurate key waypoints)
+        const legFrom = await getBestCoord(leg.from);
+        const legTo = await getBestCoord(leg.to);
+        
         const coords: [number, number][] = [];
-        for (const stop of leg.stops) {
-          const c = await getBestCoord(stop);
-          if (c) coords.push(c);
-        }
+        if (legFrom) coords.push(legFrom);
+        if (legTo) coords.push(legTo);
+
         legsC.push({ coords, leg });
 
-        if (i < journey.legs.length - 1) {
-          const tc = await getBestCoord(leg.to);
-          if (tc) mkrs.push({ name: leg.to, coord: tc, type: 'transfer' });
+        // Transfer markers
+        if (i < journey.legs.length - 1 && legTo) {
+          mkrs.push({ name: leg.to, coord: legTo, type: 'transfer' });
         }
       }
 
+      // Geocode the destination
       const destCoord = await getBestCoord(result.dest);
       if (destCoord) mkrs.push({ name: result.dest, coord: destCoord, type: 'dest' });
 
